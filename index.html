@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🍺 Drinking Roulette</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Nunito:wght@700;800;900&display=swap');
+
+:root {
+  --gold: #f5c518;
+  --gold2: #c9960a;
+  --dark: #0d0d14;
+  --card: #16161f;
+  --border: rgba(245,197,24,0.25);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+body {
+  background: var(--dark);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: 'Nunito', sans-serif;
+  overflow-x: hidden;
+  padding-bottom: 40px;
+}
+
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(245,197,24,0.07) 0%, transparent 70%);
+  pointer-events:none; z-index:0;
+}
+
+.header {
+  width:100%; padding:26px 20px 10px;
+  text-align:center; position:relative; z-index:1;
+}
+.title {
+  font-family:'Bebas Neue',sans-serif;
+  font-size:3rem; letter-spacing:4px;
+  color: var(--gold);
+  text-shadow: 0 0 30px rgba(245,197,24,0.4), 0 2px 6px rgba(0,0,0,0.9);
+  line-height:1;
+}
+.subtitle {
+  font-size:0.85rem; letter-spacing:6px; text-transform:uppercase;
+  color:rgba(255,255,255,0.3); margin-top:4px;
+}
+
+/* ── SETUP ── */
+#setup-screen {
+  width:100%; max-width:400px;
+  padding:16px 20px; position:relative; z-index:1;
+}
+.setup-card {
+  background: var(--card);
+  border:1px solid var(--border);
+  border-radius:24px; padding:28px 22px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6), inset 0 1px 0 rgba(245,197,24,0.08);
+}
+.setup-label {
+  font-size:1.2rem; font-weight:900; color:rgba(255,255,255,0.9);
+  text-align:center; margin-bottom:5px;
+}
+.setup-sub {
+  font-size:0.9rem; color:rgba(255,255,255,0.35);
+  text-align:center; margin-bottom:22px;
+}
+.slots-row {
+  display:flex; gap:10px; justify-content:center; margin-bottom:24px;
+}
+.slot-btn {
+  width:52px; height:52px;
+  background:rgba(255,255,255,0.05);
+  border:2px solid rgba(255,255,255,0.1);
+  border-radius:14px; color:rgba(255,255,255,0.5);
+  font-size:1.5rem; font-weight:900;
+  font-family:'Bebas Neue',sans-serif;
+  cursor:pointer; transition:all 0.18s;
+  display:flex; align-items:center; justify-content:center;
+}
+.slot-btn.active {
+  background:linear-gradient(145deg,#e8a800,#f5c518);
+  border-color:var(--gold); color:#0d0d14;
+  box-shadow:0 0 18px rgba(245,197,24,0.45);
+  transform:scale(1.08);
+}
+.slot-btn:active { transform:scale(0.93); }
+
+.zero-badge {
+  display:flex; align-items:center; gap:12px;
+  background:rgba(231,76,60,0.12); border:1px solid rgba(231,76,60,0.3);
+  border-radius:14px; padding:13px 16px; margin-bottom:22px;
+}
+.zero-badge .icon { font-size:2rem; }
+.zero-badge .info strong { font-size:1.05rem; color:#e74c3c; display:block; margin-bottom:2px; }
+.zero-badge .info span { font-size:0.85rem; color:rgba(255,255,255,0.4); }
+
+.start-btn {
+  width:100%; padding:17px;
+  background:linear-gradient(135deg,var(--gold2),var(--gold));
+  border:none; border-radius:18px;
+  color:#0d0d14; font-size:1.5rem; font-weight:900;
+  font-family:'Nunito',sans-serif;
+  cursor:pointer; letter-spacing:1px;
+  box-shadow:0 8px 28px rgba(245,197,24,0.3);
+  transition:all 0.18s;
+}
+.start-btn:active { transform:scale(0.97); }
+
+/* ── GAME ── */
+#game-screen {
+  display:none; width:100%; max-width:420px;
+  padding:6px 16px; position:relative; z-index:1;
+  flex-direction:column; align-items:center;
+}
+
+/* Wrapper: needle sits above the wheel circle */
+.wheel-outer {
+  position:relative;
+  width:min(86vw, 340px);
+  margin:0 auto;
+}
+
+/* Needle — fixed at top, points downward into wheel */
+.needle-wrap {
+  position:absolute;
+  top:-30px;            /* sits above the wheel */
+  left:50%;
+  transform:translateX(-50%);
+  z-index:30; pointer-events:none;
+  display:flex; flex-direction:column; align-items:center;
+  filter: drop-shadow(0 3px 12px rgba(231,76,60,0.75));
+}
+.needle-cap {
+  width:26px; height:26px; border-radius:50%;
+  background:radial-gradient(circle at 38% 35%, #f16052, #c0392b);
+  border:3px solid #fff;
+  box-shadow:0 0 14px rgba(231,76,60,0.8);
+  z-index:2; flex-shrink:0;
+}
+.needle-body {
+  width:0; height:0;
+  border-left:10px solid transparent;
+  border-right:10px solid transparent;
+  border-top:50px solid #e74c3c;
+  margin-top:-1px;
+}
+
+.wheel-container {
+  position:relative;
+  width:100%; aspect-ratio:1;
+}
+
+.wheel-ring {
+  position:absolute; inset:-5px; border-radius:50%;
+  background:conic-gradient(#f5c518,#c9960a,#f5c518,#c9960a,#f5c518);
+  animation:ringRot 10s linear infinite; z-index:0; opacity:0.7;
+}
+@keyframes ringRot { to { transform:rotate(360deg); } }
+
+#wheel-canvas {
+  position:relative; z-index:1;
+  width:100%; height:100%;
+  border-radius:50%; display:block;
+  box-shadow:0 0 30px rgba(245,197,24,0.15), 0 12px 40px rgba(0,0,0,0.7);
+}
+
+.center-btn {
+  position:absolute; top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  width:68px; height:68px; border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#2a2a38,#0d0d14);
+  border:3px solid var(--gold);
+  box-shadow:0 0 18px rgba(245,197,24,0.45);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; z-index:20; transition:all 0.15s; user-select:none;
+}
+.center-btn:active { transform:translate(-50%,-50%) scale(0.9); }
+.center-btn.spin-anim { animation:centerPulse 0.7s ease-in-out infinite; }
+@keyframes centerPulse {
+  0%,100% { box-shadow:0 0 18px rgba(245,197,24,0.45); }
+  50%      { box-shadow:0 0 40px rgba(245,197,24,0.95); }
+}
+
+.tap-hint {
+  text-align:center; margin-top:16px;
+  color:rgba(245,197,24,0.5);
+  font-size:1rem; letter-spacing:2px; font-weight:800;
+  animation:hintBlink 1.6s ease-in-out infinite;
+}
+@keyframes hintBlink { 0%,100%{opacity:0.35} 50%{opacity:1} }
+
+/* ── RESULT ── */
+#result-panel {
+  width:100%; margin-top:18px;
+  text-align:center; min-height:90px;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:8px;
+}
+.res-label {
+  font-size:1rem; font-weight:700; letter-spacing:3px;
+  color:rgba(255,255,255,0.45);
+  animation:fadeUp 0.35s ease both;
+}
+.res-winner {
+  font-family:'Bebas Neue',sans-serif;
+  font-size:5.5rem; line-height:1;
+  animation:popIn 0.45s cubic-bezier(0.34,1.56,0.64,1) 0.05s both;
+}
+.res-action {
+  font-size:1.5rem; font-weight:900; color:#fff;
+  animation:popIn 0.45s cubic-bezier(0.34,1.56,0.64,1) 0.18s both;
+}
+@keyframes popIn {
+  from{transform:scale(0.2);opacity:0} to{transform:scale(1);opacity:1}
+}
+@keyframes fadeUp {
+  from{transform:translateY(8px);opacity:0} to{transform:translateY(0);opacity:1}
+}
+
+.spin-again-btn {
+  margin-top:10px; padding:14px 42px;
+  background:transparent; border:2px solid var(--gold);
+  border-radius:50px; color:var(--gold);
+  font-size:1.2rem; font-weight:900; font-family:'Nunito',sans-serif;
+  cursor:pointer; letter-spacing:1px; transition:all 0.18s;
+}
+.spin-again-btn:active { background:rgba(245,197,24,0.1); transform:scale(0.97); }
+
+.back-btn {
+  padding:10px 22px; background:transparent;
+  border:1px solid rgba(255,255,255,0.15); border-radius:50px;
+  color:rgba(255,255,255,0.4); font-size:0.95rem;
+  font-family:'Nunito',sans-serif; cursor:pointer; margin-top:8px;
+  transition:all 0.18s;
+}
+.back-btn:active { color:rgba(255,255,255,0.8); }
+
+/* Confetti */
+.cf {
+  position:fixed; pointer-events:none; z-index:999;
+  animation:cfFall linear forwards;
+}
+@keyframes cfFall {
+  0%  { transform:translateY(-10px) rotate(0deg); opacity:1; }
+  100%{ transform:translateY(105vh) rotate(720deg); opacity:0; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="title">🍺 Drinking Roulette</div>
+  <div class="subtitle">Spin &bull; Drink &bull; Repeat</div>
+</div>
+
+<!-- SETUP -->
+<div id="setup-screen">
+  <div class="setup-card">
+    <div class="setup-label">How many players?</div>
+    <div class="setup-sub">Slot 0 is always on the wheel</div>
+
+    <div class="slots-row">
+      <button class="slot-btn" data-n="2" onclick="selectSlots(2)">2</button>
+      <button class="slot-btn active" data-n="3" onclick="selectSlots(3)">3</button>
+      <button class="slot-btn" data-n="4" onclick="selectSlots(4)">4</button>
+      <button class="slot-btn" data-n="5" onclick="selectSlots(5)">5</button>
+      <button class="slot-btn" data-n="6" onclick="selectSlots(6)">6</button>
+    </div>
+
+    <div class="zero-badge">
+      <div class="icon">🔴</div>
+      <div class="info">
+        <strong>Slot 0 = EVERYONE DRINKS!</strong>
+        <span>No one escapes this one 🍻</span>
+      </div>
+    </div>
+
+    <button class="start-btn" onclick="startGame()">🎲 Start Game!</button>
+  </div>
+</div>
+
+<!-- GAME -->
+<div id="game-screen">
+  <div class="wheel-outer" id="wheel-outer">
+
+    <!-- Needle: cap (circle) on top, triangle pointing down -->
+    <div class="needle-wrap">
+      <div class="needle-cap"></div>
+      <div class="needle-body"></div>
+    </div>
+
+    <div class="wheel-container">
+      <div class="wheel-ring"></div>
+      <canvas id="wheel-canvas"></canvas>
+      <div class="center-btn" id="center-btn" onclick="spinWheel()">
+        <svg id="center-icon" width="30" height="30" viewBox="0 0 24 24" fill="#f5c518">
+          <polygon points="7,3 21,12 7,21"/>
+        </svg>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="tap-hint" id="tap-hint">TAP CENTER TO SPIN</div>
+  <div id="result-panel"></div>
+  <button class="back-btn" onclick="backToSetup()">⚙ Change Players</button>
+</div>
+
+<script>
+const BASE_COLORS = ['#e74c3c','#4cc9f0','#06d6a0','#f5c518','#b5179e','#fb8500','#3498db'];
+
+let numPlayers  = 3;
+let totalSlots  = 4;
+let slotLabels  = [];
+let slotColors  = [];
+let currentAngle = 0;
+let spinning = false, animId = null;
+let canvas, ctx, size;
+
+function selectSlots(n) {
+  numPlayers = n;
+  document.querySelectorAll('.slot-btn').forEach(b =>
+    b.classList.toggle('active', parseInt(b.dataset.n) === n)
+  );
+}
+
+function buildSlots() {
+  totalSlots = numPlayers + 1;
+  slotLabels = ['0'];
+  slotColors = ['#e74c3c'];
+  for (let i = 1; i <= numPlayers; i++) {
+    slotLabels.push(String(i));
+    slotColors.push(BASE_COLORS[i % BASE_COLORS.length]);
+  }
+}
+
+function startGame() {
+  buildSlots();
+  document.getElementById('setup-screen').style.display = 'none';
+  const gs = document.getElementById('game-screen');
+  gs.style.display = 'flex';
+  document.getElementById('result-panel').innerHTML = '';
+  document.getElementById('tap-hint').style.display = 'block';
+  document.getElementById('tap-hint').textContent = 'TAP CENTER TO SPIN';
+  document.getElementById('center-icon').innerHTML = '<polygon points="7,3 21,12 7,21"/>';
+
+  canvas = document.getElementById('wheel-canvas');
+  size   = canvas.parentElement.offsetWidth;
+  canvas.width  = size;
+  canvas.height = size;
+  ctx = canvas.getContext('2d');
+  currentAngle = 0;
+  drawWheel();
+}
+
+function drawWheel() {
+  const cx = size / 2, cy = size / 2, r = size / 2 - 3;
+  const arc = (Math.PI * 2) / totalSlots;
+  ctx.clearRect(0, 0, size, size);
+
+  for (let i = 0; i < totalSlots; i++) {
+    const sa = currentAngle + i * arc - Math.PI / 2;
+    const ea = sa + arc;
+
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, sa, ea);
+    ctx.closePath();
+    ctx.fillStyle = slotColors[i];
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Number label
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(sa + arc / 2);
+
+    const labelR   = r * 0.60;
+    const fontSize = Math.max(20, size * 0.095);
+
+    ctx.font = `900 ${fontSize}px "Bebas Neue", sans-serif`;
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 8;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(slotLabels[i], labelR, 0);
+
+    // "ALL" sub-text for slot 0
+    if (i === 0) {
+      ctx.font = `900 ${Math.max(9,size*0.034)}px Nunito, sans-serif`;
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.shadowBlur = 4;
+      ctx.fillText('ALL DRINK', labelR, fontSize * 0.7);
+    }
+
+    ctx.restore();
+  }
+
+  // Gold outer ring
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(245,197,24,0.95)';
+  ctx.lineWidth = 5;
+  ctx.stroke();
+
+  // Center circle
+  ctx.beginPath();
+  ctx.arc(cx, cy, 33, 0, Math.PI * 2);
+  ctx.fillStyle = '#0d0d14';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(245,197,24,0.6)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+function getWinner() {
+  const arc = (Math.PI * 2) / totalSlots;
+  // needle fixed at top (12 o'clock = -PI/2 in standard math)
+  // in wheel-local frame, needle is at angle: -currentAngle (mod 2PI), then offset by PI/2
+  let a = ((-currentAngle % (Math.PI*2)) + Math.PI*2) % (Math.PI*2);
+  return Math.floor(a / arc) % totalSlots;
+}
+
+function spinWheel() {
+  if (spinning) return;
+  spinning = true;
+
+  const btn  = document.getElementById('center-btn');
+  const icon = document.getElementById('center-icon');
+  btn.classList.add('spin-anim');
+  icon.innerHTML = '<rect x="5" y="3" width="4.5" height="18" rx="1"/><rect x="14.5" y="3" width="4.5" height="18" rx="1"/>';
+  document.getElementById('tap-hint').style.display = 'none';
+  document.getElementById('result-panel').innerHTML = '';
+
+  const totalTime = 9500 + Math.random() * 1000;
+  const totalRot  = (9 + Math.random() * 5) * Math.PI * 2;
+  let t0 = null;
+
+  function ease(t) { return 1 - Math.pow(1 - t, 3.2); }
+
+  function frame(ts) {
+    if (!t0) t0 = ts;
+    const t = Math.min((ts - t0) / totalTime, 1);
+    currentAngle = ease(t) * totalRot;
+    drawWheel();
+    if (t < 1) {
+      animId = requestAnimationFrame(frame);
+    } else {
+      spinning = false;
+      btn.classList.remove('spin-anim');
+      icon.innerHTML = '<polygon points="7,3 21,12 7,21"/>';
+      document.getElementById('tap-hint').style.display = 'block';
+      document.getElementById('tap-hint').textContent = 'TAP TO SPIN AGAIN';
+      showResult(getWinner());
+    }
+  }
+  animId = requestAnimationFrame(frame);
+}
+
+function showResult(idx) {
+  const panel = document.getElementById('result-panel');
+  const color = slotColors[idx];
+  const isZero = idx === 0;
+
+  if (isZero) {
+    panel.innerHTML = `
+      <div class="res-label">💥 OH NO...</div>
+      <div class="res-winner" style="color:#e74c3c;text-shadow:0 0 30px #e74c3c99;font-size:4rem">SLOT 0!</div>
+      <div class="res-action">🍺🍺 EVERYONE DRINKS! 🍺🍺</div>
+      <button class="spin-again-btn" onclick="spinWheel()">🔄 Spin Again</button>`;
+  } else {
+    panel.innerHTML = `
+      <div class="res-label">🎯 PLAYER</div>
+      <div class="res-winner" style="color:${color};text-shadow:0 0 30px ${color}99">${slotLabels[idx]}</div>
+      <div class="res-action">🍺 DRINK UP!</div>
+      <button class="spin-again-btn" onclick="spinWheel()">🔄 Spin Again</button>`;
+  }
+
+  confetti(color, isZero ? 60 : 35);
+}
+
+function confetti(c, n) {
+  const pal = [c,'#f5c518','#fff','#e74c3c'];
+  for (let i = 0; i < n; i++) {
+    const el = document.createElement('div');
+    el.className = 'cf';
+    const sz = 6 + Math.random()*9;
+    el.style.cssText = `left:${Math.random()*100}vw;top:-12px;
+      background:${pal[0|Math.random()*pal.length]};
+      width:${sz}px;height:${sz}px;
+      border-radius:${Math.random()>.5?'50%':'3px'};
+      animation-duration:${1.4+Math.random()*2}s;
+      animation-delay:${Math.random()*0.4}s;`;
+    document.body.appendChild(el);
+    setTimeout(()=>el.remove(), 4200);
+  }
+}
+
+function backToSetup() {
+  if (animId) cancelAnimationFrame(animId);
+  spinning = false;
+  document.getElementById('game-screen').style.display = 'none';
+  document.getElementById('setup-screen').style.display = 'block';
+}
+
+selectSlots(3);
+</script>
+</body>
+</html>
