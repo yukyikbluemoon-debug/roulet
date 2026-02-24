@@ -138,16 +138,16 @@ body::before {
 }
 .needle-cap {
   width:26px; height:26px; border-radius:50%;
-  background:radial-gradient(circle at 38% 35%, #f16052, #c0392b);
+  background:radial-gradient(circle at 38% 35%, #555, #111);
   border:3px solid #fff;
-  box-shadow:0 0 14px rgba(231,76,60,0.8);
+  box-shadow:0 0 14px rgba(0,0,0,0.9), 0 0 6px rgba(255,255,255,0.2);
   z-index:2; flex-shrink:0;
 }
 .needle-body {
   width:0; height:0;
   border-left:10px solid transparent;
   border-right:10px solid transparent;
-  border-top:50px solid #e74c3c;
+  border-top:50px solid #111;
   margin-top:-1px;
 }
 
@@ -313,12 +313,15 @@ body::before {
 </div>
 
 <script>
+// Colors per player (index 1..6)
 const BASE_COLORS = ['#e74c3c','#4cc9f0','#06d6a0','#f5c518','#b5179e','#fb8500','#3498db'];
 
 let numPlayers  = 3;
-let totalSlots  = 4;
-let slotLabels  = [];
-let slotColors  = [];
+let slotData    = [];   // [{label, color, weight}]
+let cumAngles   = [];   // cumulative start angle (wheel-local, 0..2PI)
+let totalWeight = 0;
+let baseUnit    = 0;    // radians per 1 weight unit
+
 let currentAngle = 0;
 let spinning = false, animId = null;
 let canvas, ctx, size;
@@ -331,12 +334,25 @@ function selectSlots(n) {
 }
 
 function buildSlots() {
-  totalSlots = numPlayers + 1;
-  slotLabels = ['0'];
-  slotColors = ['#e74c3c'];
-  for (let i = 1; i <= numPlayers; i++) {
-    slotLabels.push(String(i));
-    slotColors.push(BASE_COLORS[i % BASE_COLORS.length]);
+  // slot 0 = weight 2 (double size), each player slot = weight 1
+  // players interleaved: 1,2,3,...N repeated 3 times
+  const REPEAT = 3;
+  slotData = [{ label:'0', color:'#e74c3c', weight:2 }];
+  for (let r = 0; r < REPEAT; r++) {
+    for (let p = 1; p <= numPlayers; p++) {
+      slotData.push({ label:String(p), color:BASE_COLORS[p % BASE_COLORS.length], weight:1 });
+    }
+  }
+  // total weight = 2 + N*3
+  totalWeight = 2 + numPlayers * REPEAT;
+  baseUnit    = (Math.PI * 2) / totalWeight;
+
+  // precompute cumulative start angles (wheel-local frame)
+  cumAngles = [];
+  let cum = 0;
+  for (const s of slotData) {
+    cumAngles.push(cum);
+    cum += s.weight * baseUnit;
   }
 }
 
@@ -359,45 +375,53 @@ function startGame() {
   drawWheel();
 }
 
+/* ── Draw wheel with variable-size slices ── */
 function drawWheel() {
   const cx = size / 2, cy = size / 2, r = size / 2 - 3;
-  const arc = (Math.PI * 2) / totalSlots;
   ctx.clearRect(0, 0, size, size);
 
-  for (let i = 0; i < totalSlots; i++) {
-    const sa = currentAngle + i * arc - Math.PI / 2;
-    const ea = sa + arc;
+  for (let i = 0; i < slotData.length; i++) {
+    const s    = slotData[i];
+    const arc  = s.weight * baseUnit;
+    const sa   = currentAngle + cumAngles[i] - Math.PI / 2;
+    const ea   = sa + arc;
+    const mid  = sa + arc / 2;
 
+    // Slice fill
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.arc(cx, cy, r, sa, ea);
     ctx.closePath();
-    ctx.fillStyle = slotColors[i];
+    ctx.fillStyle = s.color;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Number label
+    // Label
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate(sa + arc / 2);
+    ctx.rotate(mid);
 
-    const labelR   = r * 0.60;
-    const fontSize = Math.max(20, size * 0.095);
+    const labelR = r * 0.60;
+    // Bigger font for slot 0 (double-wide)
+    const fontSize = s.weight === 2
+      ? Math.max(26, size * 0.11)
+      : Math.max(16, size * 0.075);
 
     ctx.font = `900 ${fontSize}px "Bebas Neue", sans-serif`;
     ctx.fillStyle = '#fff';
     ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 8;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(slotLabels[i], labelR, 0);
+    ctx.fillText(s.label, labelR, 0);
 
-    // "ALL" sub-text for slot 0
-    if (i === 0) {
-      ctx.font = `900 ${Math.max(9,size*0.034)}px Nunito, sans-serif`;
+    // Sub-text for slot 0
+    if (s.label === '0') {
+      const subSize = Math.max(9, size * 0.033);
+      ctx.font = `900 ${subSize}px Nunito, sans-serif`;
       ctx.fillStyle = 'rgba(255,255,255,0.8)';
       ctx.shadowBlur = 4;
-      ctx.fillText('ALL DRINK', labelR, fontSize * 0.7);
+      ctx.fillText('ALL DRINK', labelR, fontSize * 0.72);
     }
 
     ctx.restore();
@@ -420,14 +444,18 @@ function drawWheel() {
   ctx.stroke();
 }
 
+/* ── Find which slot is under the needle (12 o'clock) ── */
 function getWinner() {
-  const arc = (Math.PI * 2) / totalSlots;
-  // needle fixed at top (12 o'clock = -PI/2 in standard math)
-  // in wheel-local frame, needle is at angle: -currentAngle (mod 2PI), then offset by PI/2
-  let a = ((-currentAngle % (Math.PI*2)) + Math.PI*2) % (Math.PI*2);
-  return Math.floor(a / arc) % totalSlots;
+  // Needle at canvas top = wheel-local angle = -currentAngle (mod 2PI)
+  let needleLocal = ((-currentAngle) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+  for (let i = 0; i < slotData.length; i++) {
+    const end = cumAngles[i] + slotData[i].weight * baseUnit;
+    if (needleLocal >= cumAngles[i] && needleLocal < end) return i;
+  }
+  return 0;
 }
 
+/* ── Spin ── */
 function spinWheel() {
   if (spinning) return;
   spinning = true;
@@ -440,7 +468,7 @@ function spinWheel() {
   document.getElementById('result-panel').innerHTML = '';
 
   const totalTime = 9500 + Math.random() * 1000;
-  const totalRot  = (9 + Math.random() * 5) * Math.PI * 2;
+  const totalRot  = (10 + Math.random() * 5) * Math.PI * 2;
   let t0 = null;
 
   function ease(t) { return 1 - Math.pow(1 - t, 3.2); }
@@ -464,10 +492,11 @@ function spinWheel() {
   animId = requestAnimationFrame(frame);
 }
 
+/* ── Show result ── */
 function showResult(idx) {
-  const panel = document.getElementById('result-panel');
-  const color = slotColors[idx];
-  const isZero = idx === 0;
+  const panel  = document.getElementById('result-panel');
+  const s      = slotData[idx];
+  const isZero = s.label === '0';
 
   if (isZero) {
     panel.innerHTML = `
@@ -478,12 +507,12 @@ function showResult(idx) {
   } else {
     panel.innerHTML = `
       <div class="res-label">🎯 PLAYER</div>
-      <div class="res-winner" style="color:${color};text-shadow:0 0 30px ${color}99">${slotLabels[idx]}</div>
+      <div class="res-winner" style="color:${s.color};text-shadow:0 0 30px ${s.color}99">${s.label}</div>
       <div class="res-action">🍺 DRINK UP!</div>
       <button class="spin-again-btn" onclick="spinWheel()">🔄 Spin Again</button>`;
   }
 
-  confetti(color, isZero ? 60 : 35);
+  confetti(s.color, isZero ? 60 : 35);
 }
 
 function confetti(c, n) {
